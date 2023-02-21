@@ -3,13 +3,12 @@
 use Psr\Http\Message\ResponseInterface as Response;
 use Psr\Http\Message\ServerRequestInterface as Request;
 
+require '../src/utils/make_response.php';
+
 # Retrieve chats for a user
 $app->get('/chats', function (Request $request, Response $response) {
     if(!$request->hasHeader('username')){
-        $response_body = ["code"=>401,"message"=>"Authentication missing"];
-        $response->getBody()->write(json_encode($response_body));
-        return $response
-        ->withStatus($response_body["code"]);
+        return make_response(401,"Authentication missing",$response);
     }
 
     $username = $request->getHeader("username")[0];
@@ -28,27 +27,28 @@ $app->get('/chats', function (Request $request, Response $response) {
         ->withStatus($response_body["code"]);
     }
 
-    $stmt = $pdo->prepare('SELECT * FROM (SELECT d.id, user2, u1, username AS u2 FROM (SELECT Chats.id, user2, Users.username AS u1 FROM Chats, Users WHERE Chats.user1=Users.id) d, Users WHERE d.user2=Users.id) z WHERE z.u1=? OR z.u2=?');
     $stmt = $pdo->prepare('SELECT * FROM (SELECT d.id AS chat_id, user1 AS user1_id, user1_username, user2, username AS user2_username FROM (SELECT Chats.id, user2, user1, Users.username AS user1_username FROM Chats, Users WHERE Chats.user1=Users.id) d, Users WHERE d.user2=Users.id) z WHERE z.user1_username=? OR z.user2_username=?');
     $stmt->bindParam(1, $username);
     $stmt->bindParam(2, $username);
     $stmt->execute();
     $chats = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    $active_chats = array();
 
+    # Add last message to each chat object
     foreach($chats as $chat){
         $chat_id = $chat["chat_id"];
-        $stmt = $pdo->prepare('SELECT message FROM Messages WHERE chat_id=? ORDER BY id DESC LIMIT 1');
+        $stmt = $pdo->prepare('SELECT message, timestamp FROM Messages WHERE chat_id=? ORDER BY id DESC LIMIT 1');
         $stmt->bindParam(1, $chat_id);
         $stmt->execute();
-        $chat = $stmt->fetch();
-        if($chat){
-            $chats[array_search($chat,$chats)] += ["last_message" => $chat[0]];
-        }else{
-            $chats[array_search($chat,$chats)] += ["last_message" => ""];
+        $last_message = $stmt->fetch();
+        if($last_message){
+            $chat += ["last_message" => $last_message["message"]];
+            $chat += ["timestamp" => $last_message["timestamp"]];
+            array_push($active_chats,$chat);
         }
     }
 
-    $response->getBody()->write(json_encode($chats));
+    $response->getBody()->write(json_encode($active_chats));
     return $response
         ->withStatus(200)
         ->withHeader("Content-Type","application/json");
@@ -85,7 +85,7 @@ $app->post('/chats/message/', function (Request $request, Response $response) {
     # If previous conversation does not exists
     if(!$chat_id){
         
-        #Create a new chat for two people
+        #Create a new chat
         $stmt = $pdo->prepare('INSERT INTO Chats (user1,user2) VALUES(?, ?)');
         $stmt->bindParam(1, $user_id);
         $stmt->bindParam(2, $to);
@@ -117,10 +117,12 @@ $app->post('/chats/message/', function (Request $request, Response $response) {
         $response->getBody()->write(json_encode($response_body));
         return $response
             ->withStatus($response_body["code"]);
-            
+    
+    #If previous conversation exists
     }else{
         $chat_id = $chat_id["id"];
 
+        #Add message to existing chat
         $stmt = $pdo->prepare('INSERT INTO Messages(chat_id,sender,message) VALUES(?, ?, ?)');
         $stmt->bindParam(1, $chat_id);
         $stmt->bindParam(2, $user_id);
@@ -151,11 +153,13 @@ $app->get('/chats/{id}', function (Request $request, Response $response) {
     $pdo = new Db();
     $pdo = $pdo->connect();
 
+    #Check chat id
     $stmt = $pdo->prepare('SELECT * FROM Chats WHERE id= :chatid');
     $stmt->bindParam(':chatid', $chat_id);
     $stmt->execute();
     $chat = $stmt->fetch(PDO::FETCH_ASSOC);
-
+    
+    #If chat not found
     if(!$chat){
         $response_body = ["code"=>401,"message"=>"No chat found for this id."];
         $response->getBody()->write(json_encode($response_body));
@@ -163,11 +167,13 @@ $app->get('/chats/{id}', function (Request $request, Response $response) {
             ->withStatus($response_body["code"]);
     }
 
+    #Get messages for chat
     $stmt = $pdo->prepare('SELECT id, timestamp, sender, message FROM Messages WHERE chat_id= :chatid ORDER BY id DESC');
     $stmt->bindParam(':chatid', $chat_id);
     $stmt->execute();
     $messages = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
+    #If no message exist
     if(!$messages){
         $response_body = ["code"=>401,"message"=>"No message found for this chat."];
         $response->getBody()->write(json_encode($response_body));
