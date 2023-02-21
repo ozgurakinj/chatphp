@@ -57,15 +57,37 @@ $app->get('/chats', function (Request $request, Response $response) {
 
 # Retrieve messages in a chat
 $app->get('/chats/{id}', function (Request $request, Response $response) {
-    $username = $request->getHeader("booo");
-    print_r($request->hasHeader('booo'));
-    die();
+   
+    $chat_id = $request->getAttribute("id");
 
-    $db = new Db();
-    $db = $db->connect();
-    $users = $db->query("SELECT * FROM Chats WHERE")->fetchAll(PDO::FETCH_OBJ);
+    $pdo = new Db();
+    $pdo = $pdo->connect();
 
-    $response->getBody()->write(json_encode($users));
+    $stmt = $pdo->prepare('SELECT * FROM Chats WHERE id= :chatid');
+    $stmt->bindParam(':chatid', $chat_id);
+    $stmt->execute();
+    $chat = $stmt->fetch(PDO::FETCH_ASSOC);
+
+    if(!$chat){
+        $response_body = ["code"=>401,"message"=>"No chat found for this id."];
+        $response->getBody()->write(json_encode($response_body));
+        return $response
+            ->withStatus($response_body["code"]);
+    }
+
+    $stmt = $pdo->prepare('SELECT id, timestamp, sender, message FROM Messages WHERE chat_id= :chatid ORDER BY id DESC');
+    $stmt->bindParam(':chatid', $chat_id);
+    $stmt->execute();
+    $messages = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+    if(!$messages){
+        $response_body = ["code"=>401,"message"=>"No message found for this chat."];
+        $response->getBody()->write(json_encode($response_body));
+        return $response
+            ->withStatus($response_body["code"]);
+    }
+
+    $response->getBody()->write(json_encode($messages));
     return $response
         ->withStatus(200)
         ->withHeader("Content-Type","application/json");
@@ -75,5 +97,6 @@ $app->get('/chats/{id}', function (Request $request, Response $response) {
 #Send message
 $app->post('/chats/{id}', function (Request $request, Response $response) {
     
+
     }
 );
