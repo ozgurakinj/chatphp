@@ -55,6 +55,94 @@ $app->get('/chats', function (Request $request, Response $response) {
     }
 );
 
+#Send message
+$app->post('/chats/message/', function (Request $request, Response $response) {
+    
+    $parsedBody = $request->getBody();
+    $parsedBody = json_decode($parsedBody,true);
+
+    if(!array_key_exists("user_id",$parsedBody) || !array_key_exists("to",$parsedBody) || !array_key_exists("message",$parsedBody)){
+        $response_body = ["code"=>401,"message"=>"Missing fields"];
+        $response->getBody()->write(json_encode($response_body));
+        return $response
+        ->withStatus($response_body["code"]);
+    }
+
+    $user_id = $parsedBody["user_id"];
+    $to = $parsedBody["to"];
+    $message = $parsedBody["message"];
+
+    $pdo = new Db();
+    $pdo = $pdo->connect();
+    $stmt = $pdo->prepare('SELECT id FROM Chats WHERE (user1=? AND user2=?) OR (user1=? AND user2=?)');
+    $stmt->bindParam(1, $user_id);
+    $stmt->bindParam(2, $to);
+    $stmt->bindParam(3, $to);
+    $stmt->bindParam(4, $user_id);
+    $stmt->execute();
+    $chat_id = $stmt->fetch(PDO::FETCH_ASSOC);
+
+    # If previous conversation does not exists
+    if(!$chat_id){
+        
+        #Create a new chat for two people
+        $stmt = $pdo->prepare('INSERT INTO Chats (user1,user2) VALUES(?, ?)');
+        $stmt->bindParam(1, $user_id);
+        $stmt->bindParam(2, $to);
+        try{
+            $stmt->execute();
+            $chat_id = $pdo->lastInsertId();
+        }catch(Exception $e){
+            $response_body = ["code"=>401,"message"=>$e->getMessage()];
+            $response->getBody()->write(json_encode($response_body));
+            return $response
+            ->withStatus($response_body["code"]);
+        }
+
+        #Add new message to the chat
+        $stmt = $pdo->prepare('INSERT INTO Messages (chat_id,sender,message) VALUES(?, ?, ?)');
+        $stmt->bindParam(1, $chat_id);
+        $stmt->bindParam(2, $user_id);
+        $stmt->bindParam(3, $message);
+        try{
+            $stmt->execute();
+            $chat_id = $pdo->lastInsertId();
+        }catch(Exception $e){
+            $response_body = ["code"=>401,"message"=>$e->getMessage()];
+            $response->getBody()->write(json_encode($response_body));
+            return $response
+            ->withStatus($response_body["code"]);
+        }
+        $response_body = ["code"=>200,"message"=>"Message sent"];
+        $response->getBody()->write(json_encode($response_body));
+        return $response
+            ->withStatus($response_body["code"]);
+            
+    }else{
+        $chat_id = $chat_id["id"];
+
+        $stmt = $pdo->prepare('INSERT INTO Messages(chat_id,sender,message) VALUES(?, ?, ?)');
+        $stmt->bindParam(1, $chat_id);
+        $stmt->bindParam(2, $user_id);
+        $stmt->bindParam(3, $message);
+        try{
+            $stmt->execute();
+        }catch(Exception $e){
+            $response_body = ["code"=>401,"message"=>$e->getMessage()];
+            $response->getBody()->write(json_encode($response_body));
+            return $response
+            ->withStatus($response_body["code"]);
+        }
+
+        $response_body = ["code"=>200,"message"=>"Message sent"];
+        $response->getBody()->write(json_encode($response_body));
+        return $response
+            ->withStatus($response_body["code"]);
+
+        }
+    }
+);
+
 # Retrieve messages in a chat
 $app->get('/chats/{id}', function (Request $request, Response $response) {
    
@@ -94,9 +182,3 @@ $app->get('/chats/{id}', function (Request $request, Response $response) {
     }
 );
 
-#Send message
-$app->post('/chats/{id}', function (Request $request, Response $response) {
-    
-
-    }
-);
