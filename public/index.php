@@ -6,6 +6,7 @@ use Psr\Http\Message\ServerRequestInterface as Request;
 
 require __DIR__ . '/../vendor/autoload.php';
 require '../src/db/db.php';
+require '../src/utils/make_response.php';
 
 $app = AppFactory::create();
 $app->addErrorMiddleware(true, true, true);

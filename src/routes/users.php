@@ -7,12 +7,9 @@ use Psr\Http\Message\ServerRequestInterface as Request;
 $app->get('/users', function (Request $request, Response $response) {
     $db = new Db();
     $db = $db->connect();
-    $users = $db->query("SELECT username FROM Users")->fetchAll(PDO::FETCH_OBJ);
+    $users = $db->query("SELECT id, username FROM Users")->fetchAll(PDO::FETCH_OBJ);
 
-    $response->getBody()->write(json_encode($users));
-    return $response
-        ->withStatus(200)
-        ->withHeader("Content-Type","application/json");
+    return make_response_json($users,$response);
     }
 );
 
@@ -22,10 +19,7 @@ $app->post('/users', function (Request $request, Response $response) {
     $parsedBody = $request->getBody();
     $parsedBody = json_decode($parsedBody,true);
     if(!array_key_exists("username",$parsedBody) || !array_key_exists("password",$parsedBody)){
-        $response_body = ["code"=>401,"message"=>"Missing fields"];
-        $response->getBody()->write(json_encode($response_body));
-        return $response
-        ->withStatus($response_body["code"]);
+        return make_response_message(401,"Missing fields.",$response);
     }
     $username = $parsedBody["username"];
     $password = $parsedBody["password"];
@@ -38,16 +32,10 @@ $app->post('/users', function (Request $request, Response $response) {
     try{
         $result = $stmt->execute();
     }catch (Exception $e){
-        $response_body = ["code"=>401,"message"=>$e->getMessage()];
-        $response->getBody()->write(json_encode($response_body));
-        return $response
-        ->withStatus($response_body["code"]);
+        return make_response_message(401,$e->getMessage(),$response);
     }
 
-    $response_body = ["code"=>200,"message"=>"Registration success"];
-    $response->getBody()->write(json_encode($response_body));
-    return $response
-        ->withStatus($response_body["code"]);
+    return make_response_message(200,"Registration success.",$response);
 } 
 );
 
@@ -58,10 +46,7 @@ $app->post('/users/{username}', function (Request $request, Response $response) 
     $parsedBody = $request->getBody();
     $parsedBody = json_decode($parsedBody,true);
     if(!array_key_exists("username",$parsedBody) || !array_key_exists("password",$parsedBody)){
-        $response_body = ["code"=>401,"message"=>"Missing fields"];
-        $response->getBody()->write(json_encode($response_body));
-        return $response
-        ->withStatus($response_body["code"]);
+        return make_response_message(401,"Missing fields.",$response);
     }
         
     $pdo = new Db();
@@ -75,16 +60,9 @@ $app->post('/users/{username}', function (Request $request, Response $response) 
     $user = $stmt->fetch(PDO::FETCH_ASSOC);
 
     if(!$user){
-        $response_body = ["code"=>401,"message"=>"Username or password incorrect"];
-        $response->getBody()->write(json_encode($response_body));
-        return $response
-            ->withStatus($response_body["code"]);
+        return make_response_message(401,"Username or password incorrect.",$response);
     }
 
-    $response_body = ["code"=>200,"message"=>"Authentication success"];
-    $response->getBody()->write(json_encode($response_body));
-    return $response
-        ->withStatus($response_body["code"]);
-
+    return make_response_message(401,"Authentication success.",$response);
 } 
 );

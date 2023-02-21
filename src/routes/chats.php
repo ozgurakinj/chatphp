@@ -3,12 +3,10 @@
 use Psr\Http\Message\ResponseInterface as Response;
 use Psr\Http\Message\ServerRequestInterface as Request;
 
-require '../src/utils/make_response.php';
-
 # Retrieve chats for a user
 $app->get('/chats', function (Request $request, Response $response) {
     if(!$request->hasHeader('username')){
-        return make_response(401,"Authentication missing",$response);
+        return make_response_message(401,"Authentication missing",$response);
     }
 
     $username = $request->getHeader("username")[0];
@@ -21,10 +19,7 @@ $app->get('/chats', function (Request $request, Response $response) {
     $stmt->execute();
     $user_id = $stmt->fetchAll(PDO::FETCH_ASSOC);
     if(!$user_id){
-        $response_body = ["code"=>401,"message"=>"User does not exists"];
-        $response->getBody()->write(json_encode($response_body));
-        return $response
-        ->withStatus($response_body["code"]);
+        return make_response_message(400,"User does not exists",$response);
     }
 
     $stmt = $pdo->prepare('SELECT * FROM (SELECT d.id AS chat_id, user1 AS user1_id, user1_username, user2, username AS user2_username FROM (SELECT Chats.id, user2, user1, Users.username AS user1_username FROM Chats, Users WHERE Chats.user1=Users.id) d, Users WHERE d.user2=Users.id) z WHERE z.user1_username=? OR z.user2_username=?');
@@ -48,10 +43,7 @@ $app->get('/chats', function (Request $request, Response $response) {
         }
     }
 
-    $response->getBody()->write(json_encode($active_chats));
-    return $response
-        ->withStatus(200)
-        ->withHeader("Content-Type","application/json");
+    return make_response_json($active_chats, $response);
     }
 );
 
@@ -62,10 +54,7 @@ $app->post('/chats/message/', function (Request $request, Response $response) {
     $parsedBody = json_decode($parsedBody,true);
 
     if(!array_key_exists("user_id",$parsedBody) || !array_key_exists("to",$parsedBody) || !array_key_exists("message",$parsedBody)){
-        $response_body = ["code"=>401,"message"=>"Missing fields"];
-        $response->getBody()->write(json_encode($response_body));
-        return $response
-        ->withStatus($response_body["code"]);
+        return make_response_message(401,"Missing fields",$response);
     }
 
     $user_id = $parsedBody["user_id"];
@@ -93,10 +82,7 @@ $app->post('/chats/message/', function (Request $request, Response $response) {
             $stmt->execute();
             $chat_id = $pdo->lastInsertId();
         }catch(Exception $e){
-            $response_body = ["code"=>401,"message"=>$e->getMessage()];
-            $response->getBody()->write(json_encode($response_body));
-            return $response
-            ->withStatus($response_body["code"]);
+            return make_response_message(401,$e->getMessage(),$response);
         }
 
         #Add new message to the chat
@@ -108,15 +94,10 @@ $app->post('/chats/message/', function (Request $request, Response $response) {
             $stmt->execute();
             $chat_id = $pdo->lastInsertId();
         }catch(Exception $e){
-            $response_body = ["code"=>401,"message"=>$e->getMessage()];
-            $response->getBody()->write(json_encode($response_body));
-            return $response
-            ->withStatus($response_body["code"]);
+            return make_response_message(401,$e->getMessage(),$response);
         }
-        $response_body = ["code"=>200,"message"=>"Message sent"];
-        $response->getBody()->write(json_encode($response_body));
-        return $response
-            ->withStatus($response_body["code"]);
+        return make_response_message(200,"Message sent.",$response);
+
     
     #If previous conversation exists
     }else{
@@ -130,17 +111,10 @@ $app->post('/chats/message/', function (Request $request, Response $response) {
         try{
             $stmt->execute();
         }catch(Exception $e){
-            $response_body = ["code"=>401,"message"=>$e->getMessage()];
-            $response->getBody()->write(json_encode($response_body));
-            return $response
-            ->withStatus($response_body["code"]);
+            return make_response_message(401,$e->getMessage(),$response);
         }
 
-        $response_body = ["code"=>200,"message"=>"Message sent"];
-        $response->getBody()->write(json_encode($response_body));
-        return $response
-            ->withStatus($response_body["code"]);
-
+        return make_response_message(200,"Message sent.",$response);
         }
     }
 );
@@ -161,10 +135,7 @@ $app->get('/chats/{id}', function (Request $request, Response $response) {
     
     #If chat not found
     if(!$chat){
-        $response_body = ["code"=>401,"message"=>"No chat found for this id."];
-        $response->getBody()->write(json_encode($response_body));
-        return $response
-            ->withStatus($response_body["code"]);
+        return make_response_message(400,"No chat found for this id.",$response);
     }
 
     #Get messages for chat
@@ -175,16 +146,10 @@ $app->get('/chats/{id}', function (Request $request, Response $response) {
 
     #If no message exist
     if(!$messages){
-        $response_body = ["code"=>401,"message"=>"No message found for this chat."];
-        $response->getBody()->write(json_encode($response_body));
-        return $response
-            ->withStatus($response_body["code"]);
+        return make_response_message(400,"No message found for this chat.",$response);
     }
 
-    $response->getBody()->write(json_encode($messages));
-    return $response
-        ->withStatus(200)
-        ->withHeader("Content-Type","application/json");
+    return make_response_json($messages,$response);
     }
 );
 
