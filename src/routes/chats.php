@@ -5,26 +5,18 @@ use Psr\Http\Message\ServerRequestInterface as Request;
 
 # Retrieve chats for a user
 $app->get('/chats', function (Request $request, Response $response) {
-    if(!$request->hasHeader('username')){
-        return make_response_message(401,"Authentication missing",$response);
-    }
-
-    $username = $request->getHeader("username")[0];
 
     $pdo = new Db();
     $pdo = $pdo->connect();
-
-    $stmt = $pdo->prepare('SELECT id FROM Users WHERE username = :username');
-    $stmt->bindParam(':username', $username);
-    $stmt->execute();
-    $user_id = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    
+    $user_id = authenticate_request($pdo,$request,$response);
     if(!$user_id){
-        return make_response_message(400,"User does not exists",$response);
+        return make_response_message(403,"Unauthorized",$response);
     }
 
-    $stmt = $pdo->prepare('SELECT * FROM (SELECT d.id AS chat_id, user1 AS user1_id, user1_username, user2, username AS user2_username FROM (SELECT Chats.id, user2, user1, Users.username AS user1_username FROM Chats, Users WHERE Chats.user1=Users.id) d, Users WHERE d.user2=Users.id) z WHERE z.user1_username=? OR z.user2_username=?');
-    $stmt->bindParam(1, $username);
-    $stmt->bindParam(2, $username);
+    $stmt = $pdo->prepare('SELECT chat_id, user1_id, user1_username, user2 AS user2_id, user2_username FROM (SELECT d.id AS chat_id, user1 AS user1_id, user1_username, user2, username AS user2_username FROM (SELECT Chats.id, user2, user1, Users.username AS user1_username FROM Chats, Users WHERE Chats.user1=Users.id) d, Users WHERE d.user2=Users.id) WHERE user1_id=? OR user2_id=?');
+    $stmt->bindParam(1, $user_id);
+    $stmt->bindParam(2, $user_id);
     $stmt->execute();
     $chats = $stmt->fetchAll(PDO::FETCH_ASSOC);
     $active_chats = array();
@@ -53,16 +45,21 @@ $app->post('/chats/message/', function (Request $request, Response $response) {
     $parsedBody = $request->getBody();
     $parsedBody = json_decode($parsedBody,true);
 
-    if(!array_key_exists("user_id",$parsedBody) || !array_key_exists("to",$parsedBody) || !array_key_exists("message",$parsedBody)){
+    if(!array_key_exists("to",$parsedBody) || !array_key_exists("message",$parsedBody)){
         return make_response_message(401,"Missing fields",$response);
     }
 
-    $user_id = $parsedBody["user_id"];
     $to = $parsedBody["to"];
     $message = $parsedBody["message"];
 
     $pdo = new Db();
     $pdo = $pdo->connect();
+    
+    $user_id = authenticate_request($pdo,$request,$response);
+    if(!$user_id){
+        return make_response_message(403,"Unauthorized",$response);
+    }
+
     $stmt = $pdo->prepare('SELECT id FROM Chats WHERE (user1=? AND user2=?) OR (user1=? AND user2=?)');
     $stmt->bindParam(1, $user_id);
     $stmt->bindParam(2, $to);
@@ -121,11 +118,15 @@ $app->post('/chats/message/', function (Request $request, Response $response) {
 
 # Retrieve messages in a chat
 $app->get('/chats/{id}', function (Request $request, Response $response) {
-   
+    
     $chat_id = $request->getAttribute("id");
-
     $pdo = new Db();
     $pdo = $pdo->connect();
+    
+    $user_id = authenticate_request($pdo,$request,$response);
+    if(!$user_id){
+        return make_response_message(403,"Unauthorized",$response);
+    }
 
     #Check chat id
     $stmt = $pdo->prepare('SELECT * FROM Chats WHERE id= :chatid');
@@ -136,6 +137,17 @@ $app->get('/chats/{id}', function (Request $request, Response $response) {
     #If chat not found
     if(!$chat){
         return make_response_message(400,"No chat found for this id.",$response);
+    }
+    
+    #Check if authorized for this chat
+    $stmt = $pdo->prepare('SELECT * FROM Chats WHERE (id= ?) AND (user1=? OR user2=?)');
+    $stmt->bindParam(1, $chat_id);
+    $stmt->bindParam(2, $user_id);
+    $stmt->bindParam(3, $user_id);
+    $stmt->execute();
+    $chat_authorized = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    if(!$chat_authorized){
+        return make_response_message(403,"Unauthorized.",$response);
     }
 
     #Get messages for chat

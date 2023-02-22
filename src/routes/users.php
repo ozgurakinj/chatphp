@@ -43,17 +43,19 @@ $app->post('/users', function (Request $request, Response $response) {
 # User login
 $app->post('/users/{username}', function (Request $request, Response $response) {
 
+    #Get username and password
     $parsedBody = $request->getBody();
     $parsedBody = json_decode($parsedBody,true);
     if(!array_key_exists("username",$parsedBody) || !array_key_exists("password",$parsedBody)){
         return make_response_message(401,"Missing fields.",$response);
     }
-        
+    $username = $parsedBody["username"];
+    $password = $parsedBody["password"];
+    
+    #Check if username and password is correct
     $pdo = new Db();
     $pdo = $pdo->connect();
     $stmt = $pdo->prepare('SELECT * FROM Users WHERE username = :username AND password = :password');
-    $username = $parsedBody["username"];
-    $password = $parsedBody["password"];
     $stmt->bindParam(':username', $username);
     $stmt->bindParam(':password', $password);
     $stmt->execute();
@@ -63,6 +65,9 @@ $app->post('/users/{username}', function (Request $request, Response $response) 
         return make_response_message(401,"Username or password incorrect.",$response);
     }
 
-    return make_response_message(401,"Authentication success.",$response);
+    #Return token if credentials are correct
+    $user_id = $user["id"];
+    return create_login_token($user_id, $pdo, $response);
+    
 } 
 );
