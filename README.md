@@ -1,14 +1,14 @@
 # chatphp
-a simple chat backend for bunq job assessment, made with php slim framework
+a simple chat backend with authorization for bunq job assessment, made with php, slim framework and sqlite
 
 
 ## Users endpoint
 
 ### User login
-POST /users/{username} {"username","password"}
+POST /users/{username}, {"username","password"}
 
 ### User register
-POST /users {"username","password"}
+POST /users, {"username","password"}
 
 ### Get users list
 GET /users
@@ -16,10 +16,10 @@ GET /users
 ## Chats endpoint
 
 ### Retrieve chats for a user
-GET /chats/ headers=["username"]
+GET /chats, headers=["Authorization"]
 
 ### Retrieve messages in a chat
-GET /chats/{id}
+GET /chats/{id}, headers=["Authorization"]
 
 ### Send message
-POST /chats/message {"user_id","to","message"}
+POST /chats/message/ headers=["Authorization"], {"to","message"}
